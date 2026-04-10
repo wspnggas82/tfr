@@ -30,20 +30,17 @@ def download_mp3():
     file_id = str(int(time.time()))
     final_path = f"{DOWNLOAD_FOLDER}/{file_id}.mp3"
     
-  ydl_opts = {
-        # This tells it: "Get the best audio, but if that fails, get whatever audio is there"
+ ydl_opts = {
         'format': 'bestaudio/best',
         'ffmpeg_location': MY_FFMPEG_PATH,
         'outtmpl': f'{DOWNLOAD_FOLDER}/{file_id}.%(ext)s',
         'noplaylist': True,
         'quiet': True,
         'cookiefile': 'cookies.txt', 
-        # Added these two lines to be more compatible with different videos
-        'ignoreerrors': True,
-        'preferredquality': '192',
+        # REMOVED 'ios' so it actually uses your cookies
         'extractor_args': {
             'youtube': {
-                'player_client': ['ios', 'web'],
+                'player_client': ['web'],
             }
         },
         'postprocessors': [
