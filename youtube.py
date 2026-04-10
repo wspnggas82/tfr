@@ -7,15 +7,10 @@ import re
 
 app = Flask(__name__)
 
-# Render's temporary storage
+# Use /tmp for Render compatibility
 DOWNLOAD_FOLDER = '/tmp/youtube'
 if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
-
-MY_FFMPEG_PATH = '/usr/bin/ffmpeg'
-
-def clean_filename(title):
-    return re.sub(r'[^\w\- ]', '', title).strip()
 
 @app.route('/')
 def home():
@@ -25,40 +20,26 @@ def home():
 def download_mp3():
     url = request.args.get('url')
     if not url:
-        return "Error: No URL provided", 400
+        return "No URL provided", 400
 
     file_id = str(int(time.time()))
-    final_path = f"{DOWNLOAD_FOLDER}/{file_id}.mp3"
-    
- ydl_opts = {
+    # Simplified options to ensure it boots
+    ydl_opts = {
         'format': 'bestaudio/best',
-        'ffmpeg_location': MY_FFMPEG_PATH,
         'outtmpl': f'{DOWNLOAD_FOLDER}/{file_id}.%(ext)s',
         'noplaylist': True,
-        'quiet': True,
         'cookiefile': 'cookies.txt', 
-        # REMOVED 'ios' so it actually uses your cookies
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['web'],
-            }
-        },
-        'postprocessors': [
-            {
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            },
-            {'key': 'FFmpegMetadata'},
-            {'key': 'EmbedThumbnail'},
-        ],
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            original_title = info.get('title', 'audio')
-            safe_title = clean_filename(original_title)
+            ydl.download([url])
+            final_path = f"{DOWNLOAD_FOLDER}/{file_id}.mp3"
 
         @after_this_request
         def cleanup(response):
@@ -69,16 +50,12 @@ def download_mp3():
             threading.Thread(target=delete_later).start()
             return response
 
-        return send_file(
-            final_path, 
-            as_attachment=True, 
-            download_name=f"{safe_title}.mp3",
-            mimetype='audio/mpeg'
-        )
+        return send_file(final_path, as_attachment=True, download_name="audio.mp3")
         
     except Exception as e:
-        return f"Server Error: {str(e)}", 500
+        return str(e), 500
 
 if __name__ == '__main__':
+    # Render default port
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
