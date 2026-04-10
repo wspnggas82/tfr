@@ -3,7 +3,6 @@ import yt_dlp
 import os
 import time
 import threading
-import shutil
 import re
 
 app = Flask(__name__)
@@ -13,16 +12,14 @@ DOWNLOAD_FOLDER = '/tmp/youtube'
 if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
-# Standard FFmpeg path in Docker
 MY_FFMPEG_PATH = '/usr/bin/ffmpeg'
 
 def clean_filename(title):
-    # Removes characters that break iPhone file saving
     return re.sub(r'[^\w\- ]', '', title).strip()
 
 @app.route('/')
 def home():
-    return "YouTube MP3 Service is Live"
+    return "YouTube Service is Live"
 
 @app.route('/download')
 def download_mp3():
@@ -31,22 +28,29 @@ def download_mp3():
         return "Error: No URL provided", 400
 
     file_id = str(int(time.time()))
+    final_path = f"{DOWNLOAD_FOLDER}/{file_id}.mp3"
     
-ydl_opts = {
+    ydl_opts = {
         'format': 'bestaudio/best',
-        'ffmpeg_location': '/usr/bin/ffmpeg',
+        'ffmpeg_location': MY_FFMPEG_PATH,
         'outtmpl': f'{DOWNLOAD_FOLDER}/{file_id}.%(ext)s',
         'noplaylist': True,
         'quiet': True,
-        
-        # THIS IS THE KEY LINE
         'cookiefile': 'cookies.txt', 
-        
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-        }],
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['ios', 'web'],
+            }
+        },
+        'postprocessors': [
+            {
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            },
+            {'key': 'FFmpegMetadata'},
+            {'key': 'EmbedThumbnail'},
+        ],
     }
 
     try:
@@ -54,15 +58,11 @@ ydl_opts = {
             info = ydl.extract_info(url, download=True)
             original_title = info.get('title', 'audio')
             safe_title = clean_filename(original_title)
-            final_path = f"{DOWNLOAD_FOLDER}/{file_id}.mp3"
-
-        if not os.path.exists(final_path):
-            return "Error: MP3 conversion failed", 500
 
         @after_this_request
         def cleanup(response):
             def delete_later():
-                time.sleep(60) # Wait 1 min to ensure download completes
+                time.sleep(60)
                 if os.path.exists(final_path):
                     os.remove(final_path)
             threading.Thread(target=delete_later).start()
@@ -76,8 +76,7 @@ ydl_opts = {
         )
         
     except Exception as e:
-        print(f"Server Error: {e}")
-        return f"Error: {str(e)}", 500
+        return f"Server Error: {str(e)}", 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
