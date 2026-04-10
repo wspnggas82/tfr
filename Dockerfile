@@ -1,6 +1,6 @@
 FROM python:3.10-slim
 
-# Install FFmpeg AND Node.js (the JS runtime YouTube wants)
+# Install FFmpeg AND Node.js (this is the JS runtime YouTube wants)
 RUN apt-get update && apt-get install -y ffmpeg nodejs && apt-get clean
 
 WORKDIR /app
