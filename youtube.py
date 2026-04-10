@@ -32,23 +32,21 @@ def download_mp3():
 
     file_id = str(int(time.time()))
     
-    ydl_opts = {
+ydl_opts = {
         'format': 'bestaudio/best',
-        'ffmpeg_location': MY_FFMPEG_PATH,
+        'ffmpeg_location': '/usr/bin/ffmpeg',
         'outtmpl': f'{DOWNLOAD_FOLDER}/{file_id}.%(ext)s',
         'noplaylist': True,
         'quiet': True,
-        # TRICK: Mimic a real mobile device to bypass "Sign in" errors
-        'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
-        'postprocessors': [
-            {
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            },
-            {'key': 'FFmpegMetadata'},
-            {'key': 'EmbedThumbnail'},
-        ],
+        
+        # THIS IS THE KEY LINE
+        'cookiefile': 'cookies.txt', 
+        
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
     }
 
     try:
