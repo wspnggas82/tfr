@@ -4,73 +4,90 @@ import os
 import time
 import threading
 import shutil
+import re
 
 app = Flask(__name__)
 
-# Render uses /tmp for writing files
+# Render requires using /tmp for any file writing
 DOWNLOAD_FOLDER = '/tmp/downloads'
 if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
-# In Docker, FFmpeg is always here:
-MY_FFMPEG_PATH = '/usr/bin/ffmpeg'
+# Docker will install ffmpeg to the standard path
+MY_FFMPEG_PATH = "/usr/bin/ffmpeg"
+
+def clean_filename(title):
+    # Removes special characters that confuse the iPhone file system
+    return re.sub(r'[^\w\- ]', '', title).strip()
 
 @app.route('/')
 def home():
-    return "Server is LIVE"
+    return "Downloader is Online (Docker Version)"
 
 @app.route('/download')
-def download_audio():
+def master_download():
     url = request.args.get('url')
     if not url:
         return "Error: No URL provided", 400
 
-    # Use a timestamp to keep the filename simple and avoid errors
+    print(f"--- Processing Request: {url} ---")
+    is_tiktok = "tiktok" in url.lower()
+    
+    # Use a timestamp to keep filenames unique
     file_id = str(int(time.time()))
-
+    
     ydl_opts = {
-        'format': 'bestaudio/best',
+        'format': 'bestvideo+bestaudio/best' if is_tiktok else 'bestaudio/best',
         'ffmpeg_location': MY_FFMPEG_PATH,
         'outtmpl': f'{DOWNLOAD_FOLDER}/{file_id}.%(ext)s',
-        # THE FIX: This tricks YouTube into thinking you're on a real device
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        'postprocessors': [
-            {
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            },
-            {'key': 'EmbedThumbnail'},
-            {'key': 'FFmpegMetadata'},
-        ],
+        'noplaylist': True,
+        'quiet': True,
     }
+
+    if not is_tiktok:
+        ydl_opts['postprocessors'] = [{
+            'key': 'FFmpegExtractAudio', 
+            'preferredcodec': 'mp3', 
+            'preferredquality': '192'
+        }]
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            # Render needs to know the exact title for the download name
-            original_title = info.get('title', 'audio')
-            final_filename = f"{DOWNLOAD_FOLDER}/{file_id}.mp3"
+            original_title = info.get('title', 'download')
+            safe_title = clean_filename(original_title)
+            
+            ext = "mp4" if is_tiktok else "mp3"
+            final_path = f"{DOWNLOAD_FOLDER}/{file_id}.{ext}"
+            download_name = f"{safe_title}.{ext}"
+
+        if not os.path.exists(final_path):
+            return "Error: File conversion failed (FFmpeg issue)", 500
 
         @after_this_request
         def cleanup(response):
             def delete_later():
-                time.sleep(60) # Keep it for 1 minute so the download finishes
-                if os.path.exists(final_filename):
-                    os.remove(final_filename)
+                time.sleep(60) # Wait 1 minute then delete from server
+                try:
+                    if os.path.exists(final_path):
+                        os.remove(final_path)
+                except Exception as e:
+                    print(f"Cleanup error: {e}")
             threading.Thread(target=delete_later).start()
             return response
 
         return send_file(
-            final_filename, 
+            final_path, 
             as_attachment=True, 
-            download_name=f"{original_title}.mp3"
+            download_name=download_name,
+            mimetype='video/mp4' if is_tiktok else 'audio/mpeg'
         )
         
     except Exception as e:
-        return f"Error: {str(e)}", 500
+        print(f"CRITICAL ERROR: {e}")
+        return f"Server Error: {str(e)}", 500
 
 if __name__ == '__main__':
-    # Use Render's dynamic port
+    # Render's port is dynamic
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
