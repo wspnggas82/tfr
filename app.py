@@ -36,12 +36,20 @@ def master_download():
     # Use a timestamp to keep filenames unique
     file_id = str(int(time.time()))
     
-    ydl_opts = {
+ydl_opts = {
         'format': 'bestvideo+bestaudio/best' if is_tiktok else 'bestaudio/best',
         'ffmpeg_location': MY_FFMPEG_PATH,
         'outtmpl': f'{DOWNLOAD_FOLDER}/{file_id}.%(ext)s',
         'noplaylist': True,
         'quiet': True,
+        # TRICK: This makes YouTube think you are a real browser
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'referer': 'https://www.google.com/',
+        'http_headers': {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-us,en;q=0.5',
+            'Sec-Fetch-Mode': 'navigate',
+        }
     }
 
     if not is_tiktok:
